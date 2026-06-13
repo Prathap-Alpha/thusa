@@ -51,13 +51,18 @@
       <input id="teamName" placeholder="First name" autocomplete="off">
       <input id="teamEmail" placeholder="email@alphadirect.co.bw" type="email" autocomplete="off">
       <button id="teamAddBtn" class="primary">Add</button>
+      <button id="teamCancelEdit" class="ghost-btn" hidden>Cancel</button>
     </div>
+    <p class="hint">Tap <b>✎</b> on anyone to edit them, or <b>✕</b> to remove. Add as many as you like — there's no limit.</p>
     <ul id="teamList"></ul>
     <details>
-      <summary>Paste a whole list at once</summary>
-      <p class="hint">One person per line — e.g. <code>Kago, kago@alphadirect.co.bw</code></p>
+      <summary>Add / edit a whole list at once</summary>
+      <p class="hint">One person per line — e.g. <code>Kago, kago@alphadirect.co.bw</code>. Importing updates anyone already in the list (matched by email) and adds the rest.</p>
       <textarea id="bulkBox" rows="5" placeholder="Kago, kago@alphadirect.co.bw&#10;Arun, arun@alphadirect.co.bw"></textarea>
-      <button id="bulkBtn" class="primary">Import list</button>
+      <div class="row">
+        <button id="bulkBtn" class="primary">Import list</button>
+        <button id="bulkLoadBtn" class="ghost-btn">Load current list to edit</button>
+      </div>
     </details>
   </section>
 

@@ -538,6 +538,8 @@ async function runLLM() {
 
 /* ---------------- team view ---------------- */
 
+let editingEmail = null;  // email of the row currently being edited, or null
+
 function renderTeam() {
   const list = el('teamList');
   list.textContent = '';
@@ -565,20 +567,56 @@ function renderTeam() {
     left.appendChild(avatar);
     left.appendChild(info);
 
+    const actions = document.createElement('div');
+    actions.className = 't-actions';
+
+    const edit = document.createElement('button');
+    edit.className = 't-edit';
+    edit.textContent = '✎';
+    edit.setAttribute('aria-label', 'Edit ' + p.name);
+    edit.addEventListener('click', () => startEditMember(p));
+
     const del = document.createElement('button');
+    del.className = 't-del';
     del.textContent = '✕';
     del.setAttribute('aria-label', 'Remove ' + p.name);
-    // Delete by email, not list index — the displayed order is sorted and
+    // Delete/edit by email, not list index — the displayed order is sorted and
     // would not line up with the stored array's indices.
     del.addEventListener('click', () => {
+      if (editingEmail && editingEmail.toLowerCase() === p.email.toLowerCase()) cancelEdit();
       saveTeam(getTeam().filter(t => t.email.toLowerCase() !== p.email.toLowerCase()));
       renderTeam();
     });
 
+    actions.appendChild(edit);
+    actions.appendChild(del);
     li.appendChild(left);
-    li.appendChild(del);
+    li.appendChild(actions);
+    if (editingEmail && editingEmail.toLowerCase() === p.email.toLowerCase()) {
+      li.classList.add('editing');
+    }
     list.appendChild(li);
   }
+}
+
+// Load a person into the top fields and switch the form into "edit" mode.
+function startEditMember(p) {
+  editingEmail = p.email;
+  el('teamName').value = p.name;
+  el('teamEmail').value = p.email;
+  el('teamAddBtn').textContent = 'Save';
+  el('teamCancelEdit').hidden = false;
+  renderTeam();                 // highlight the row being edited
+  el('view-team').scrollTop = 0;
+  el('teamName').focus();
+}
+
+function cancelEdit() {
+  editingEmail = null;
+  el('teamName').value = '';
+  el('teamEmail').value = '';
+  el('teamAddBtn').textContent = 'Add';
+  el('teamCancelEdit').hidden = true;
 }
 
 function addTeamMember() {
@@ -588,12 +626,32 @@ function addTeamMember() {
     toast('Eish — I need a first name and a valid email address.');
     return;
   }
-  const team = getTeam().filter(p => p.email.toLowerCase() !== email.toLowerCase());
+  // Drop the old row being edited (if any) and any existing row with this email,
+  // then add the new/updated one — so editing and de-duping both just work.
+  const wasEditing = !!editingEmail;
+  let team = getTeam().filter(p =>
+    p.email.toLowerCase() !== email.toLowerCase() &&
+    (!editingEmail || p.email.toLowerCase() !== editingEmail.toLowerCase()));
   team.push({ name, email });
   saveTeam(team);
-  el('teamName').value = '';
-  el('teamEmail').value = '';
+  cancelEdit();                 // resets fields + button, clears editingEmail
   renderTeam();
+  if (wasEditing) {
+    toast('Updated ' + name + '.');
+  } else {
+    // Keep the cursor in First name so several people can be added quickly.
+    el('teamName').focus();
+  }
+}
+
+// Dump the whole current directory into the bulk box so it can be amended at once.
+function loadCurrentList() {
+  const team = getTeam().slice().sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  if (!team.length) { toast('Your list is empty — nothing to load yet.'); return; }
+  el('bulkBox').value = team.map(p => `${p.name}, ${p.email}`).join('\n');
+  el('bulkBox').focus();
+  toast('Loaded ' + team.length + ' people — edit the lines, then Import to update.');
 }
 
 function bulkImport() {
@@ -746,7 +804,15 @@ function wire() {
     });
   }
   el('teamAddBtn').addEventListener('click', addTeamMember);
+  el('teamCancelEdit').addEventListener('click', cancelEdit);
   el('bulkBtn').addEventListener('click', bulkImport);
+  el('bulkLoadBtn').addEventListener('click', loadCurrentList);
+  // Enter in either field adds/saves — quick when entering several people.
+  for (const fid of ['teamName', 'teamEmail']) {
+    el(fid).addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); addTeamMember(); }
+    });
+  }
   el('saveBtn').addEventListener('click', saveSettingsForm);
   el('signInBtn').addEventListener('click', () => { saveSettingsForm(); signIn().catch(e => toast(e.errorMessage || e.message)); });
   el('signOutBtn').addEventListener('click', () => signOut().catch(e => toast(e.message)));

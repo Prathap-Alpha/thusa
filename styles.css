@@ -167,7 +167,11 @@ details summary { cursor: pointer; color: var(--orange); font-size: 14px; margin
 }
 #teamList .t-name { display: block; }
 #teamList .t-email { color: var(--muted); font-size: 12.5px; display: block; word-break: break-all; }
-#teamList button { background: none; border: none; color: var(--red); font-size: 16px; cursor: pointer; padding: 4px 6px; flex: 0 0 auto; }
+#teamList .t-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+#teamList button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 8px; flex: 0 0 auto; }
+#teamList .t-edit { color: var(--orange); }
+#teamList .t-del { color: var(--red); }
+#teamList li.editing { border-color: var(--orange); }
 .count-badge {
   background: var(--orange); color: var(--navy);
   font-size: 12px; font-weight: 700; border-radius: 999px;
