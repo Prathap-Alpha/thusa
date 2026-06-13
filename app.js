@@ -716,11 +716,11 @@ function renderChips() {
     b.className = 'chip';
     b.textContent = text;
     b.addEventListener('click', () => {
+      // One tap = set it up. onSend routes it to the AI, which replies with a
+      // meeting card you confirm — so no invite goes out without your tap.
       switchView('chat');
-      const input = el('chatInput');
-      input.value = text;
-      input.focus();
-      input.dispatchEvent(new Event('input'));   // grow the textarea to fit
+      el('chatInput').value = text;
+      onSend();
     });
     wrap.appendChild(b);
   }
