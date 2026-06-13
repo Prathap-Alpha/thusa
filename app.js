@@ -541,25 +541,40 @@ async function runLLM() {
 function renderTeam() {
   const list = el('teamList');
   list.textContent = '';
-  for (const [i, p] of getTeam().entries()) {
+  const team = getTeam().slice().sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const count = el('teamCount');
+  if (count) count.textContent = team.length ? String(team.length) : '';
+  for (const p of team) {
     const li = document.createElement('li');
+
     const left = document.createElement('div');
+    left.className = 't-person';
+    const avatar = document.createElement('span');
+    avatar.className = 't-avatar';
+    avatar.textContent = ((p.name.trim()[0]) || '?').toUpperCase();
+    const info = document.createElement('div');
     const name = document.createElement('span');
+    name.className = 't-name';
     name.textContent = p.name;
     const email = document.createElement('span');
     email.className = 't-email';
     email.textContent = p.email;
-    left.appendChild(name);
-    left.appendChild(email);
+    info.appendChild(name);
+    info.appendChild(email);
+    left.appendChild(avatar);
+    left.appendChild(info);
+
     const del = document.createElement('button');
     del.textContent = '✕';
     del.setAttribute('aria-label', 'Remove ' + p.name);
+    // Delete by email, not list index — the displayed order is sorted and
+    // would not line up with the stored array's indices.
     del.addEventListener('click', () => {
-      const team = getTeam();
-      team.splice(i, 1);
-      saveTeam(team);
+      saveTeam(getTeam().filter(t => t.email.toLowerCase() !== p.email.toLowerCase()));
       renderTeam();
     });
+
     li.appendChild(left);
     li.appendChild(del);
     list.appendChild(li);
