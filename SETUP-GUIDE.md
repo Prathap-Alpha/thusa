@@ -2,7 +2,7 @@
 
 Thusa is your meeting assistant. You type ("Set up a meeting with Kago at 5pm today about
 3D accounts") and it creates the calendar invite and sends it from **your own** Outlook
-calendar. The clever part is Claude (the same AI as Javis); the calendar part is Microsoft 365.
+calendar. The clever part is Google Gemini; the calendar part is Microsoft 365.
 
 You set this up **once**. After that, you open it like any app and just chat.
 
@@ -30,19 +30,17 @@ The first time it opens it will land on the **Setup** screen because nothing is 
 
 ---
 
-## Step 1 — Your AI key (Anthropic Claude)
+## Step 1 — Your AI key (Google Gemini)
 
 This is what makes Thusa understand plain English.
 
-1. On a computer, go to **https://console.anthropic.com** and sign in with the Alpha Direct
-   Anthropic account.
-2. Left menu → **API Keys** → **Create Key**. Name it `Thusa`. Copy the key (starts with `sk-ant-`).
+1. On a computer, go to **https://aistudio.google.com/apikey** and sign in with your Google account.
+2. Click **Create API key**. Copy the key (starts with `AIza`).
 3. In Thusa, open the **⚙️ Setup** tab.
 4. Paste the key into **API key**.
-5. Leave **Model** as `claude-haiku-4-5` (fast and cheap — our approved vendor). Don't change it
-   unless you have a reason.
+5. Leave **Model** as `gemini-2.5-flash` (fast and cheap). Don't change it unless you have a reason.
 
-> The key lives only on your phone. It is never sent anywhere except Anthropic.
+> The key lives only on your phone. It is never sent anywhere except Google.
 
 ---
 
@@ -140,10 +138,10 @@ fire it, or **Cancel**. Invites go out by email from your calendar with a Teams 
   you it assumed that.
 - **"Not signed in" after a while:** open Setup, tap **Sign in with Microsoft** once more. With
   "Stay signed in" ticked this is rare.
-- **"API key was rejected":** re-check the key in Setup (Step 1).
+- **"API key was rejected":** re-check the Gemini key in Setup (Step 1).
 - **A name isn't recognised:** add the person in the **Team** tab, or type their full email in
   the chat.
 - **Everything** (key, IDs, team) is stored **only on this phone**. Reinstalling clears it — just
   redo Steps 1–3 (Azure registration in 3.1 stays, so you only re-enter the IDs and sign in).
-- **Privacy:** your chat text goes to Anthropic (to understand it); meeting details go to Microsoft
-  (to create the invite). Nothing goes anywhere else, and the app code holds no secrets.
+- **Privacy:** your chat text goes to Google Gemini (to understand it); meeting details go to
+  Microsoft (to create the invite). Nothing goes anywhere else, and the app code holds no secrets.

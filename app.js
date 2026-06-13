@@ -2,12 +2,13 @@
 
 /* ============================================================
    Thusa — chat-to-calendar assistant for Alpha Direct
-   - LLM: Anthropic Claude (direct from browser, key in Setup)
+   - LLM: Google Gemini (direct from browser, key in Setup)
+     [AI vendor = Gemini per CFO override of AD-POL-AI-GOV-001, 2026-06-13]
    - Calendar: Microsoft Graph via MSAL.js (sign in once)
    All data stays in this browser's localStorage.
    ============================================================ */
 
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const TIMEZONE = 'Africa/Gaborone';
 const GRAPH_SCOPES = ['User.Read', 'Calendars.ReadWrite'];
 const S_KEY = 'thusa_settings';
@@ -210,12 +211,12 @@ async function createEvent(m) {
   return res.json();
 }
 
-/* ---------------- Anthropic (Claude) ---------------- */
+/* ---------------- Google Gemini ---------------- */
 
-const TOOLS = [{
+const GEMINI_TOOLS = [{
   name: 'create_meeting',
   description: 'Create a calendar event in the user\'s Microsoft 365 calendar and send invites to the attendees. Call this once per meeting the user asks for.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       subject: { type: 'string', description: 'Short business-style meeting title' },
@@ -253,28 +254,27 @@ Rules:
 - Keep replies short, warm and businesslike. A light touch of Setswana ("Sharp sharp!", "Go siame.") is welcome.`;
 }
 
-async function callClaude(messages) {
+async function callGemini(contents) {
   const s = getSettings();
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const model = s.model || DEFAULT_MODEL;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+    + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(s.apiKey);
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': s.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: s.model || DEFAULT_MODEL,
-      max_tokens: 2048,
-      system: systemPrompt(),
-      tools: TOOLS,
-      messages,
+      systemInstruction: { parts: [{ text: systemPrompt() }] },
+      contents,
+      tools: [{ functionDeclarations: GEMINI_TOOLS }],
+      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.2 },
     }),
   });
   if (!res.ok) {
-    let msg = 'Anthropic API error ' + res.status;
+    let msg = 'Gemini API error ' + res.status;
     try { const j = await res.json(); msg = (j.error && j.error.message) || msg; } catch {}
-    if (res.status === 401) msg = 'Your Anthropic API key was rejected — check it in Setup.';
+    if (res.status === 400 && /API key/i.test(msg)) msg = 'Your Gemini API key was rejected — check it in Setup.';
+    if (res.status === 403) msg = 'Your Gemini API key was rejected or lacks access — check it in Setup.';
     if (res.status === 429) msg = 'Rate limit reached — wait a few seconds and try again.';
     throw new Error(msg);
   }
@@ -283,25 +283,28 @@ async function callClaude(messages) {
 
 /* ---------------- chat engine ---------------- */
 
-let history = [];      // Anthropic-format message history (this session only)
-let awaiting = null;   // { ids: [], results: {}, total, cards: {} } while cards are pending
+let history = [];      // Gemini-format `contents` for this session only
+let awaiting = null;   // { order:[{localId,name}], results:{}, total, cards:{} } while cards pending
 let busy = false;
 
+function isTextUserTurn(c) {
+  return c && c.role === 'user' && c.parts && c.parts[0] && typeof c.parts[0].text === 'string';
+}
+
 function trimHistory() {
-  // Drop oldest complete turn-groups (user-text → assistant → tool_results)
-  // without ever draining the array to empty or leaving an assistant turn
-  // at the head — both would 400 on the next request.
+  // Drop oldest complete turn-groups (user-text → model → function-responses)
+  // without leaving a model turn or a dangling functionResponse at the head —
+  // any of those would make Gemini reject the next request.
   while (history.length > 40) {
     history.shift();
-    while (history.length && history[0].role === 'assistant') history.shift();
+    while (history.length && history[0].role === 'model') history.shift();
     while (history.length && history[0].role === 'user' &&
-           Array.isArray(history[0].content) &&
-           history[0].content[0] && history[0].content[0].type === 'tool_result') {
+           history[0].parts && history[0].parts[0] && history[0].parts[0].functionResponse) {
       history.shift();
     }
   }
-  // Safety: the first message sent to the API must be a user turn.
-  while (history.length && history[0].role !== 'user') history.shift();
+  // Safety: the first content sent to Gemini must be a plain-text user turn.
+  while (history.length && !isTextUserTurn(history[0])) history.shift();
 }
 
 function addBubble(role, text) {
@@ -327,10 +330,10 @@ function setThinking(on) {
   }
 }
 
-function addCard(toolUse) {
+function addCard(localId, args) {
   const w = el('welcome');
   if (w) w.remove();
-  const input = toolUse.input || {};
+  const input = args || {};
   const card = document.createElement('div');
   card.className = 'meeting-card';
 
@@ -386,12 +389,12 @@ function addCard(toolUse) {
 
   sendBtn.addEventListener('click', () => {
     actions.remove();
-    executeMeeting(toolUse.id, input, card);
+    executeMeeting(localId, input, card);
   });
   cancelBtn.addEventListener('click', () => {
     actions.remove();
     setCardStatus(card, 'Cancelled', 'err');
-    finishTool(toolUse.id, 'The user cancelled this meeting — do not create it.');
+    finishTool(localId, 'create_meeting', { result: 'The user cancelled this meeting — do not create it.' });
   });
 
   card._actions = actions;
@@ -412,30 +415,28 @@ function setCardStatus(card, text, cls) {
   status.className = 'mc-status' + (cls ? ' ' + cls : '');
 }
 
-async function executeMeeting(id, input, card) {
+async function executeMeeting(localId, args, card) {
   setCardStatus(card, 'Sending…');
   try {
-    const ev = await createEvent(input);
+    const ev = await createEvent(args);
     setCardStatus(card, '✅ Invite sent', 'ok');
-    finishTool(id, 'Success — the event was created and the invites were sent. Outlook link: ' + (ev.webLink || 'n/a'));
+    finishTool(localId, 'create_meeting', { result: 'Success — the event was created and invites were sent.', webLink: ev.webLink || '' });
   } catch (e) {
     setCardStatus(card, '❌ ' + e.message, 'err');
-    finishTool(id, 'ERROR — the calendar event could not be created: ' + e.message, true);
+    finishTool(localId, 'create_meeting', { error: 'The calendar event could not be created: ' + e.message });
   }
 }
 
-function finishTool(id, content, isError) {
-  if (!awaiting || awaiting.results[id]) return;
-  awaiting.results[id] = {
-    type: 'tool_result',
-    tool_use_id: id,
-    content,
-    ...(isError ? { is_error: true } : {}),
-  };
+// Record a tool's outcome as a Gemini functionResponse part. Once every pending
+// call has a result, the responses are sent back in their ORIGINAL order (Gemini
+// matches parallel calls of the same name positionally — there are no call ids).
+function finishTool(localId, name, responseObj) {
+  if (!awaiting || awaiting.results[localId]) return;
+  awaiting.results[localId] = { functionResponse: { name, response: responseObj } };
   if (Object.keys(awaiting.results).length === awaiting.total) {
-    const ordered = awaiting.ids.map(i => awaiting.results[i]);
+    const parts = awaiting.order.map(o => awaiting.results[o.localId]);
     awaiting = null;
-    history.push({ role: 'user', content: ordered });
+    history.push({ role: 'user', parts });
     runLLM();
   }
 }
@@ -448,7 +449,7 @@ async function onSend() {
   const s = getSettings();
   if (!s.apiKey) {
     addBubble('user', text);
-    addBubble('assistant', 'Ke kopa API key pele — open Setup and paste your Anthropic API key, then Save.');
+    addBubble('assistant', 'Ke kopa API key pele — open Setup and paste your Gemini API key, then Save.');
     switchView('setup');
     input.value = '';
     return;
@@ -458,22 +459,19 @@ async function onSend() {
   addBubble('user', text);
 
   if (awaiting) {
-    // The user moved on while cards were still pending: resolve the open
-    // ones as cancelled and bundle everything into one user turn.
-    const ordered = awaiting.ids.map(tid => {
-      if (awaiting.results[tid]) return awaiting.results[tid];
-      const card = awaiting.cards[tid];
+    // The user moved on while cards were still pending: resolve the open ones
+    // as cancelled, then append the new text as a part in the same user turn
+    // (keeps the model → user alternation Gemini expects).
+    const parts = awaiting.order.map(o => {
+      if (awaiting.results[o.localId]) return awaiting.results[o.localId];
+      const card = awaiting.cards[o.localId];
       if (card) setCardStatus(card, 'Cancelled', 'err');
-      return {
-        type: 'tool_result',
-        tool_use_id: tid,
-        content: 'The user moved on without confirming — treat this meeting as cancelled.',
-      };
+      return { functionResponse: { name: o.name, response: { result: 'The user moved on without confirming — treat this meeting as cancelled.' } } };
     });
     awaiting = null;
-    history.push({ role: 'user', content: [...ordered, { type: 'text', text }] });
+    history.push({ role: 'user', parts: [...parts, { text }] });
   } else {
-    history.push({ role: 'user', content: [{ type: 'text', text }] });
+    history.push({ role: 'user', parts: [{ text }] });
   }
   await runLLM();
 }
@@ -481,44 +479,61 @@ async function onSend() {
 async function runLLM() {
   trimHistory();
   setThinking(true);
-  const histLen = history.length;  // snapshot so a failed call can roll back
   let resp;
   try {
-    resp = await callClaude(history);
+    resp = await callGemini(history);
   } catch (e) {
     setThinking(false);
-    // Roll back the user turn (text or tool_results) that got no assistant
-    // reply — otherwise the next send produces two consecutive user turns,
-    // which the Anthropic API rejects with a 400 and breaks the chat.
-    history.length = histLen;
+    // Roll back the one user turn (text or function-responses) the caller just
+    // pushed and that got no model reply — otherwise the next send leaves two
+    // consecutive user turns, which Gemini rejects and the chat breaks.
+    // pop() is correct because every runLLM caller pushes exactly one Content,
+    // and trimHistory only removes from the front, so that turn is always last.
+    history.pop();
     addBubble('assistant', '⚠️ ' + e.message);
     return;
   }
   setThinking(false);
 
-  history.push({ role: 'assistant', content: resp.content });
-
-  for (const block of resp.content) {
-    if (block.type === 'text' && block.text.trim()) addBubble('assistant', block.text);
+  const cand = resp.candidates && resp.candidates[0];
+  const parts = (cand && cand.content && cand.content.parts) || [];
+  if (!parts.length) {
+    // Blocked, empty, or safety-stopped: drop the unanswered user turn too.
+    history.pop();
+    const why = (cand && cand.finishReason)
+      || (resp.promptFeedback && resp.promptFeedback.blockReason)
+      || 'no response';
+    addBubble('assistant', '⚠️ Gemini returned nothing (' + why + '). Try rephrasing.');
+    return;
   }
 
-  const toolUses = resp.content.filter(b => b.type === 'tool_use');
-  if (!toolUses.length) return;
+  // Echo the model turn back verbatim (role normalised to "model").
+  history.push({ role: 'model', parts });
 
-  awaiting = { ids: toolUses.map(b => b.id), results: {}, total: toolUses.length, cards: {} };
+  for (const p of parts) {
+    if (p.text && p.text.trim()) addBubble('assistant', p.text);
+  }
+
+  const calls = parts.filter(p => p.functionCall).map(p => p.functionCall);
+  if (!calls.length) return;
+
+  awaiting = { order: [], results: {}, total: calls.length, cards: {} };
   const autoSend = !!getSettings().autoSend;
-  for (const b of toolUses) {
-    if (b.name !== 'create_meeting') {
-      finishTool(b.id, 'Unknown tool "' + b.name + '" — only create_meeting is available.', true);
-      continue;
+  calls.forEach((fc, i) => {
+    const localId = 'fc' + i;
+    awaiting.order.push({ localId, name: fc.name });
+    if (fc.name !== 'create_meeting') {
+      finishTool(localId, fc.name, { error: 'Unknown tool "' + fc.name + '" — only create_meeting is available.' });
+      return;
     }
-    const card = addCard(b);
-    awaiting.cards[b.id] = card;
+    const args = fc.args || {};
+    const card = addCard(localId, args);
+    awaiting.cards[localId] = card;
     if (autoSend) {
       card._actions.remove();
-      executeMeeting(b.id, b.input, card);
+      executeMeeting(localId, args, card);
     }
-  }
+  });
 }
 
 /* ---------------- team view ---------------- */
