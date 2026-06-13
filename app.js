@@ -638,6 +638,62 @@ function saveSettingsForm() {
   toast('Go siame — settings saved on this phone.');
 }
 
+/* ---------------- sharing / invite links ---------------- */
+
+// An invite link may carry the Microsoft app IDs (?client=…&tenant=…&model=…).
+// These are NOT secrets — an Azure SPA client id is public by design. We apply
+// them on load so a recipient skips re-typing section 2, then strip them from
+// the URL (so they don't linger and so the MSAL redirect URI stays clean).
+function applyInviteParams() {
+  const p = new URLSearchParams(location.search);
+  const patch = {};
+  const cid = p.get('client'); if (cid) patch.clientId = cid.trim();
+  const tid = p.get('tenant'); if (tid) patch.tenantId = tid.trim();
+  const mdl = p.get('model');  if (mdl) patch.model = mdl.trim();
+  if (Object.keys(patch).length) {
+    saveSettings(patch);              // only Microsoft IDs + model — never a key/team
+    _pca = null; _pcaReady = null;    // rebuild MSAL with the invited authority
+  }
+  // Strip the params so they don't linger / re-apply. Never let this abort
+  // startup — replaceState can throw in sandboxed/proxied contexts.
+  if (location.search) {
+    try { history.replaceState(null, '', location.origin + location.pathname); }
+    catch (e) { /* non-fatal — the params are harmless if they remain */ }
+  }
+}
+
+// Build a share link that carries ONLY the non-secret Microsoft app IDs. The
+// Gemini API key and the team directory are deliberately left out.
+function buildShareUrl() {
+  const s = getSettings();
+  const base = location.origin + location.pathname;
+  const p = new URLSearchParams();
+  if (s.clientId) p.set('client', s.clientId);
+  if (s.tenantId) p.set('tenant', s.tenantId);
+  if (s.model && s.model !== DEFAULT_MODEL) p.set('model', s.model);
+  const q = p.toString();
+  return q ? base + '?' + q : base;
+}
+
+async function shareApp() {
+  const url = buildShareUrl();
+  const data = {
+    title: 'Thusa — Meeting Assistant',
+    text: 'Install Thusa to schedule meetings by chat. Open the link in Chrome, tap “Add to Home screen”, then add your own AI key and sign in.',
+    url,
+  };
+  if (navigator.share) {
+    try { await navigator.share(data); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }  // user dismissed the sheet
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Link copied — paste it to whoever you want to share with.');
+  } catch {
+    toast(url);
+  }
+}
+
 /* ---------------- navigation & wiring ---------------- */
 
 function switchView(name) {
@@ -685,10 +741,12 @@ function wire() {
     deferredInstall = null;
     el('installBtn').hidden = true;
   });
+  el('shareBtn').addEventListener('click', () => shareApp());
 }
 
 async function main() {
   wire();
+  applyInviteParams();   // honour ?client=&tenant= from an invite link first
   renderTeam();
   loadSettingsForm();
   await initAuth();

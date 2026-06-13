@@ -132,6 +132,26 @@ fire it, or **Cancel**. Invites go out by email from your calendar with a Teams 
 
 ---
 
+## Sharing Thusa with someone else
+
+Thusa lives at a public web link, so anyone you send it to can install it the same way you did.
+
+1. Open **⚙️ Setup → section 4 → "📤 Share install link"**. On your phone this opens the normal
+   share sheet (WhatsApp, email, etc.); on a computer it copies the link.
+2. The link it sends carries your **Microsoft app IDs** (which are not secret), so the person
+   skips Setup section 2 — those fields fill in for them automatically. It **never** includes your
+   **AI key** or your **team list**.
+3. The recipient: opens the link in Chrome → **Add to Home screen** → adds **their own** Gemini key
+   (Step 1) → builds **their own** team list (Step 2) → taps **Sign in with Microsoft**. Done.
+
+**Who can sign in?** The Azure registration you made (Section 3) is **single-tenant** = Alpha Direct
+accounts only. So this works out of the box for **Alpha Direct colleagues**. If you want people
+**outside** Alpha Direct to sign in, change one dropdown in the Azure registration
+(**Authentication → Supported account types → "Accounts in any organizational directory"**) — then
+external Microsoft accounts can sign in too.
+
+---
+
 ## Notes & troubleshooting
 
 - **Times** are Botswana time (UTC+2). "Tomorrow morning" with no time becomes 08:00 and it tells
