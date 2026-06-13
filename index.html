@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thusa — Meeting Assistant</title>
+<meta name="theme-color" content="#0D1B2A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-mark">T</span>
+    <div>
+      <div class="brand-name">Thusa</div>
+      <div class="brand-sub" id="authBadge">Not signed in</div>
+    </div>
+  </div>
+  <button id="installBtn" class="ghost-btn" hidden>Install</button>
+</header>
+
+<main>
+
+  <!-- ============ CHAT ============ -->
+  <section id="view-chat" class="view active">
+    <div id="msgs">
+      <div class="welcome" id="welcome">
+        <p><strong>Dumela! 👋</strong> Tell me what to set up and I'll send the calendar invites from your own calendar.</p>
+        <div class="chips">
+          <button class="chip">Set up a meeting with Kago at 5pm today about 3D accounts</button>
+          <button class="chip">Meeting with Arun tomorrow morning re performance appraisal</button>
+          <button class="chip">30 min with Unami at 8am Monday — staff dismissals</button>
+        </div>
+      </div>
+    </div>
+    <div id="composer">
+      <textarea id="chatInput" rows="1" placeholder="e.g. Set up a meeting with Kago at 5pm today…" enterkeyhint="send"></textarea>
+      <button id="sendBtn" aria-label="Send">➤</button>
+    </div>
+  </section>
+
+  <!-- ============ TEAM ============ -->
+  <section id="view-team" class="view">
+    <h2>Team directory</h2>
+    <p class="hint">These are the only people Thusa can invite by first name. Stored on this phone only.</p>
+    <div class="row">
+      <input id="teamName" placeholder="First name" autocomplete="off">
+      <input id="teamEmail" placeholder="email@alphadirect.co.bw" type="email" autocomplete="off">
+      <button id="teamAddBtn" class="primary">Add</button>
+    </div>
+    <ul id="teamList"></ul>
+    <details>
+      <summary>Paste a whole list at once</summary>
+      <p class="hint">One person per line — e.g. <code>Kago, kago@alphadirect.co.bw</code></p>
+      <textarea id="bulkBox" rows="5" placeholder="Kago, kago@alphadirect.co.bw&#10;Arun, arun@alphadirect.co.bw"></textarea>
+      <button id="bulkBtn" class="primary">Import list</button>
+    </details>
+  </section>
+
+  <!-- ============ SETUP ============ -->
+  <section id="view-setup" class="view">
+    <h2>Setup</h2>
+
+    <div class="card">
+      <h3>1 · AI brain (Anthropic Claude)</h3>
+      <label>API key
+        <input id="setApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
+      </label>
+      <label>Model
+        <input id="setModel" placeholder="claude-haiku-4-5">
+      </label>
+    </div>
+
+    <div class="card">
+      <h3>2 · Microsoft 365 calendar</h3>
+      <p class="hint">From your Azure app registration (see the setup guide — one-time job).</p>
+      <label>Application (client) ID
+        <input id="setClientId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+      </label>
+      <label>Directory (tenant) ID
+        <input id="setTenantId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+      </label>
+      <div class="row">
+        <button id="signInBtn" class="primary">Sign in with Microsoft</button>
+        <button id="signOutBtn" class="ghost-btn">Sign out</button>
+      </div>
+      <p class="hint" id="signinHint">You sign in once with Microsoft's own page — Thusa never sees or stores your password. Tick “Stay signed in” when Microsoft asks.</p>
+    </div>
+
+    <div class="card">
+      <h3>3 · Behaviour</h3>
+      <label class="switch-row">
+        <input id="setAutoSend" type="checkbox">
+        <span>Send invites immediately, without showing me a confirmation card first</span>
+      </label>
+    </div>
+
+    <button id="saveBtn" class="primary big">Save settings</button>
+    <p class="hint center">Everything is stored only on this phone. Nothing is sent anywhere except Anthropic (your chat text) and Microsoft (your calendar).</p>
+  </section>
+
+</main>
+
+<nav id="tabs">
+  <button data-view="chat" class="active">💬<span>Chat</span></button>
+  <button data-view="team">👥<span>Team</span></button>
+  <button data-view="setup">⚙️<span>Setup</span></button>
+</nav>
+
+<div id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
