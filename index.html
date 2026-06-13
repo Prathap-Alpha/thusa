@@ -36,11 +36,7 @@
     <div id="msgs">
       <div class="welcome" id="welcome">
         <p><strong>Dumela! 👋</strong> Tell me what to set up and I'll send the calendar invites from your own calendar.</p>
-        <div class="chips">
-          <button class="chip">Set up a meeting with Kago at 5pm today about 3D accounts</button>
-          <button class="chip">Meeting with Arun tomorrow morning re performance appraisal</button>
-          <button class="chip">30 min with Unami at 8am Monday — staff dismissals</button>
-        </div>
+        <div class="chips" id="chips"></div>
       </div>
     </div>
     <div id="composer">
@@ -136,7 +132,18 @@
     </div>
 
     <div class="card">
-      <h3>4 · Share with your team</h3>
+      <h3>4 · Quick meetings</h3>
+      <p class="hint">These are the tap-to-fill suggestions on the Chat screen. Edit any line, remove with <b>✕</b>, or add your own. Starts with 10 standard ones.</p>
+      <ul id="promptList"></ul>
+      <div class="row">
+        <input id="promptNew" placeholder="Add a quick meeting, e.g. Catch-up with Kago Friday 9am" autocomplete="off">
+        <button id="promptAddBtn" class="primary">Add</button>
+      </div>
+      <button id="promptResetBtn" class="ghost-btn">Reset to the 10 standard ones</button>
+    </div>
+
+    <div class="card">
+      <h3>5 · Share with your team</h3>
       <p class="hint">Send Thusa to a colleague — they install it the same way and do their own quick setup. The link carries your Microsoft app IDs (not secret) so they skip that step. It <b>never</b> includes your AI key or your team list — each person adds their own.</p>
       <button id="shareBtn" class="primary">📤 Share install link</button>
     </div>

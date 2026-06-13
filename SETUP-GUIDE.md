@@ -146,7 +146,7 @@ fire it, or **Cancel**. Invites go out by email from your calendar with a Teams 
 
 Thusa lives at a public web link, so anyone you send it to can install it the same way you did.
 
-1. Open **⚙️ Setup → section 4 → "📤 Share install link"**. On your phone this opens the normal
+1. Open **⚙️ Setup → section 5 → "📤 Share install link"**. On your phone this opens the normal
    share sheet (WhatsApp, email, etc.); on a computer it copies the link.
 2. The link it sends carries your **Microsoft app IDs** (which are not secret), so the person
    skips Setup section 2 — those fields fill in for them automatically. It **never** includes your

@@ -192,6 +192,12 @@ details summary { cursor: pointer; color: var(--orange); font-size: 14px; margin
 }
 .count-badge:empty { display: none; }
 
+/* ---------- quick-meeting editor ---------- */
+#promptList { list-style: none; padding: 0; margin: 6px 0 10px; }
+#promptList li { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+#promptList .p-edit { margin-top: 0; flex: 1 1 auto; font-size: 13.5px; }
+#promptList .t-del { background: none; border: none; color: var(--red); font-size: 16px; cursor: pointer; padding: 4px 8px; flex: 0 0 auto; }
+
 /* ---------- toast ---------- */
 #toast {
   position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);

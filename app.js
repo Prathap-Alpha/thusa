@@ -13,6 +13,21 @@ const TIMEZONE = 'Africa/Gaborone';
 const GRAPH_SCOPES = ['User.Read', 'Calendars.ReadWrite'];
 const S_KEY = 'thusa_settings';
 const T_KEY = 'thusa_team';
+const P_KEY = 'thusa_prompts';
+
+// The 10 standard tap-to-fill quick meetings, seeded on first run.
+const DEFAULT_PROMPTS = [
+  'Set up a meeting with Kago at 5pm today about 3D accounts',
+  'Meeting with Arun tomorrow morning re performance appraisal',
+  '30 min with Unami at 8am Monday — staff dismissals',
+  'Catch-up with the finance team Friday 10am',
+  'Board meeting next Tuesday 2pm for 2 hours',
+  '1-on-1 with Lakshmi Thursday 3pm',
+  'Claims review with Underwriting Wednesday 9am',
+  'Budget review Monday 11am — 45 min',
+  'Quick call with Bharath today 4pm, 15 min',
+  'Month-end close kickoff first of next month 9am',
+];
 
 /* ---------------- storage ---------------- */
 
@@ -27,6 +42,16 @@ function getTeam() {
 }
 function saveTeam(team) {
   localStorage.setItem(T_KEY, JSON.stringify(team));
+}
+function getPrompts() {
+  // No stored list yet → start everyone off with the 10 standard ones.
+  const raw = localStorage.getItem(P_KEY);
+  if (raw === null) return DEFAULT_PROMPTS.slice();
+  try { const a = JSON.parse(raw); return Array.isArray(a) ? a : DEFAULT_PROMPTS.slice(); }
+  catch { return DEFAULT_PROMPTS.slice(); }
+}
+function savePrompts(list) {
+  localStorage.setItem(P_KEY, JSON.stringify(list));
 }
 function nameFor(email) {
   const hit = getTeam().find(p => p.email.toLowerCase() === String(email).toLowerCase());
@@ -679,6 +704,88 @@ function bulkImport() {
   toast('Sharp sharp! Imported ' + found.length + ' people.');
 }
 
+/* ---------------- quick meetings (chips + editor) ---------------- */
+
+// Build the tap-to-fill chips on the Chat welcome screen from the saved list.
+function renderChips() {
+  const wrap = el('chips');
+  if (!wrap) return;             // welcome already cleared by the first message
+  wrap.textContent = '';
+  for (const text of getPrompts()) {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = text;
+    b.addEventListener('click', () => {
+      switchView('chat');
+      const input = el('chatInput');
+      input.value = text;
+      input.focus();
+      input.dispatchEvent(new Event('input'));   // grow the textarea to fit
+    });
+    wrap.appendChild(b);
+  }
+}
+
+// The editable list in Setup. Each row edits one prompt in place (by index, so
+// duplicates are fine); typing saves on blur and refreshes the chips only —
+// the editor is NOT re-rendered on keystroke, so the field keeps focus.
+function renderPromptEditor() {
+  const list = el('promptList');
+  if (!list) return;
+  list.textContent = '';
+  const prompts = getPrompts();
+  prompts.forEach((text, i) => {
+    const li = document.createElement('li');
+
+    const input = document.createElement('input');
+    input.className = 'p-edit';
+    input.value = text;
+    input.addEventListener('change', () => {
+      const cur = getPrompts();
+      const v = input.value.trim();
+      if (!v) { cur.splice(i, 1); savePrompts(cur); renderPromptEditor(); }
+      else { cur[i] = v; savePrompts(cur); }
+      renderChips();
+    });
+
+    const del = document.createElement('button');
+    del.className = 't-del';
+    del.textContent = '✕';
+    del.setAttribute('aria-label', 'Remove this quick meeting');
+    del.addEventListener('click', () => {
+      const cur = getPrompts();
+      cur.splice(i, 1);
+      savePrompts(cur);
+      renderPromptEditor();
+      renderChips();
+    });
+
+    li.appendChild(input);
+    li.appendChild(del);
+    list.appendChild(li);
+  });
+}
+
+function addPrompt() {
+  const field = el('promptNew');
+  const v = field.value.trim();
+  if (!v) { toast('Type the quick meeting first.'); return; }
+  const cur = getPrompts();
+  cur.push(v);
+  savePrompts(cur);
+  field.value = '';
+  renderPromptEditor();
+  renderChips();
+  field.focus();
+}
+
+function resetPrompts() {
+  savePrompts(DEFAULT_PROMPTS.slice());
+  renderPromptEditor();
+  renderChips();
+  toast('Reset to the 10 standard quick meetings.');
+}
+
 /* ---------------- setup view ---------------- */
 
 function loadSettingsForm() {
@@ -845,12 +952,11 @@ function wire() {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 110) + 'px';
   });
-  for (const chip of document.querySelectorAll('.chip')) {
-    chip.addEventListener('click', () => {
-      el('chatInput').value = chip.textContent;
-      el('chatInput').focus();
-    });
-  }
+  el('promptAddBtn').addEventListener('click', addPrompt);
+  el('promptResetBtn').addEventListener('click', resetPrompts);
+  el('promptNew').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addPrompt(); }
+  });
   el('teamAddBtn').addEventListener('click', addTeamMember);
   el('teamCancelEdit').addEventListener('click', cancelEdit);
   el('bulkBtn').addEventListener('click', bulkImport);
@@ -873,6 +979,8 @@ async function main() {
   wire();
   applyInviteParams();   // honour ?client=&tenant= from an invite link first
   setupInstallUI();      // highlight Android/Apple steps for the current phone
+  renderChips();         // tap-to-fill quick meetings on the chat screen
+  renderPromptEditor();  // their editor in Setup
   renderTeam();
   loadSettingsForm();
   await initAuth();
