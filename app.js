@@ -777,12 +777,60 @@ function switchView(name) {
   }
 }
 
+/* ---------------- install (platform-aware) ---------------- */
+
 let deferredInstall = null;
+
+function detectOS() {
+  const ua = navigator.userAgent || '';
+  // iPadOS 13+ reports as "MacIntel" but has a touch screen — catch it too.
+  const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  return { isIOS, isAndroid };
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    navigator.standalone === true;  // iOS Safari's own flag
+}
+
+// Highlight the block for the phone we're on; hide the whole card once installed.
+function setupInstallUI() {
+  const card = el('installCard');
+  if (!card) return;
+  if (isStandalone()) { card.hidden = true; return; }  // already a home-screen app
+  const { isIOS, isAndroid } = detectOS();
+  if (isAndroid) el('osAndroid').classList.add('match');
+  if (isIOS) el('osApple').classList.add('match');
+}
+
+// Fired only on Chromium (Android/desktop) — iOS Safari has no such event,
+// which is exactly why the Apple block gives manual Share-sheet steps instead.
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredInstall = e;
   el('installBtn').hidden = false;
+  const a = el('installBtnAndroid'); if (a) a.hidden = false;
 });
+
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null;
+  el('installBtn').hidden = true;
+  const a = el('installBtnAndroid'); if (a) a.hidden = true;
+  const card = el('installCard'); if (card) card.hidden = true;
+});
+
+async function promptInstall() {
+  if (!deferredInstall) {
+    toast('Use the Chrome ⋮ menu → "Add to Home screen".');
+    return;
+  }
+  deferredInstall.prompt();
+  deferredInstall = null;
+  el('installBtn').hidden = true;
+  const a = el('installBtnAndroid'); if (a) a.hidden = true;
+}
 
 function wire() {
   for (const b of document.querySelectorAll('#tabs button')) {
@@ -816,18 +864,15 @@ function wire() {
   el('saveBtn').addEventListener('click', saveSettingsForm);
   el('signInBtn').addEventListener('click', () => { saveSettingsForm(); signIn().catch(e => toast(e.errorMessage || e.message)); });
   el('signOutBtn').addEventListener('click', () => signOut().catch(e => toast(e.message)));
-  el('installBtn').addEventListener('click', async () => {
-    if (!deferredInstall) return;
-    deferredInstall.prompt();
-    deferredInstall = null;
-    el('installBtn').hidden = true;
-  });
+  el('installBtn').addEventListener('click', promptInstall);
+  el('installBtnAndroid').addEventListener('click', promptInstall);
   el('shareBtn').addEventListener('click', () => shareApp());
 }
 
 async function main() {
   wire();
   applyInviteParams();   // honour ?client=&tenant= from an invite link first
+  setupInstallUI();      // highlight Android/Apple steps for the current phone
   renderTeam();
   loadSettingsForm();
   await initAuth();

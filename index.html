@@ -8,6 +8,12 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<!-- iOS standalone: Safari ignores most of the manifest, so these drive
+     the home-screen install + full-screen launch on iPhone/iPad. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Thusa">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -69,6 +75,31 @@
   <!-- ============ SETUP ============ -->
   <section id="view-setup" class="view">
     <h2>Setup</h2>
+
+    <div class="card" id="installCard">
+      <h3>0 · Install on your phone</h3>
+      <p class="hint">Add Thusa to your home screen so it opens full-screen like a real app. Pick your phone:</p>
+
+      <div class="install-os" id="osAndroid">
+        <div class="install-head"><span class="os-ic">🤖</span> Android — Samsung, Pixel, etc.</div>
+        <ol class="install-steps">
+          <li>Open this page in <b>Chrome</b>.</li>
+          <li>Tap <b>Install Thusa</b> below — or Chrome <b>⋮</b> menu → <b>Add to Home screen</b>.</li>
+        </ol>
+        <button id="installBtnAndroid" class="primary" hidden>⬇️ Install Thusa</button>
+        <p class="hint" id="installHintAndroid">No button? Use the Chrome <b>⋮</b> menu → <b>Add to Home screen</b>.</p>
+      </div>
+
+      <div class="install-os" id="osApple">
+        <div class="install-head"><span class="os-ic">🍎</span> iPhone / iPad</div>
+        <ol class="install-steps">
+          <li>Open this page in <b>Safari</b> — it must be Safari, not Chrome.</li>
+          <li>Tap the <b>Share</b> button (the box with an ↑ arrow) at the bottom of Safari.</li>
+          <li>Scroll down, tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+        </ol>
+        <p class="hint">Then open Thusa from the new icon and finish sections 1–2 below inside the app.</p>
+      </div>
+    </div>
 
     <div class="card">
       <h3>1 · AI brain (Google Gemini)</h3>

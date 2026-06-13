@@ -152,6 +152,19 @@ button.primary.big { width: 100%; padding: 13px; font-size: 15.5px; margin-top: 
 
 details summary { cursor: pointer; color: var(--orange); font-size: 14px; margin: 8px 0; }
 
+/* ---------- install blocks (Android + Apple) ---------- */
+.install-os {
+  background: var(--navy); border: 1px solid var(--navy-3);
+  border-radius: 10px; padding: 11px 13px; margin-top: 10px;
+}
+.install-os.match { border-color: var(--orange); }
+.install-os.match .install-head { color: var(--orange); }
+.install-head { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.install-head .os-ic { font-size: 17px; }
+.install-steps { margin: 8px 0 6px; padding-left: 20px; color: var(--text); font-size: 13.5px; line-height: 1.5; }
+.install-steps b { color: var(--text); font-weight: 600; }
+.install-os .primary { width: 100%; margin: 4px 0 2px; }
+
 /* ---------- team list ---------- */
 #teamList { list-style: none; padding: 0; margin: 6px 0; }
 #teamList li {

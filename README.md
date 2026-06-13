@@ -1,6 +1,6 @@
 # Thusa
 
-A chat-to-calendar meeting assistant, built as an installable PWA for Android (Samsung S25 Ultra).
+A chat-to-calendar meeting assistant, built as an installable PWA for Android (Chrome) and iPhone/iPad (Safari).
 
 Type a meeting request in plain English → **Google Gemini** (`generateContent` + function calling)
 parses it into a structured event → the app creates it in your **Microsoft 365** calendar via

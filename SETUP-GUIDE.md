@@ -20,13 +20,23 @@ A little orange "T" icon on your S25 Ultra home screen. Tap it, type, done.
 
 ## Step 0 — Open it on your phone
 
-1. On your Samsung, open **Chrome**.
+It works on both Android and iPhone/iPad — only the "add to home screen" gesture differs.
+The Setup tab (section 0) shows the right steps for whichever phone you're on.
+
+**Android (Samsung, Pixel…):**
+1. Open **Chrome**.
 2. Go to: **https://prathap-alpha.github.io/thusa/**
-3. Chrome will show a banner **"Add Thusa to Home screen"** (or tap the **⋮** menu top-right →
-   **Add to Home screen** → **Install**).
+3. Chrome shows a banner **"Add Thusa to Home screen"** (or tap **⋮** top-right →
+   **Add to Home screen** → **Install**). You can also tap **Install Thusa** in Setup section 0.
 4. Now you have the **T** icon. Open it from there from now on — it runs full-screen like a real app.
 
-The first time it opens it will land on the **Setup** screen because nothing is filled in yet.
+**iPhone / iPad:**
+1. Open **Safari** — it must be Safari, not Chrome (only Safari can add web apps on iOS).
+2. Go to: **https://prathap-alpha.github.io/thusa/**
+3. Tap the **Share** button (the box with an ↑ arrow) at the bottom of the screen.
+4. Scroll down, tap **Add to Home Screen**, then **Add**. The **T** icon appears on your home screen.
+
+The first time it opens it lands on the **Setup** screen because nothing is filled in yet.
 
 ---
 
