@@ -50,7 +50,7 @@ Thusa can only invite people it knows by first name.
 
 1. Open the **👥 Team** tab.
 2. Type a **First name** and their **email**, tap **Add**. Repeat for each person.
-3. Faster way: tap **"Paste a whole list at once"**, paste lines like:
+3. Faster way: tap **"Add / edit a whole list at once"**, paste lines like:
    ```
    Kago, kago@alphadirect.co.bw
    Arun, arun@alphadirect.co.bw

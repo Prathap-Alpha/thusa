@@ -1,6 +1,6 @@
 /* Thusa service worker — makes the app installable and resilient offline.
    Network-first for our own files so new deploys show up immediately;
-   API calls (Anthropic, Microsoft) are never intercepted. */
+   API calls (Google Gemini, Microsoft) are cross-origin and never intercepted. */
 
 const CACHE = 'thusa-v1';
 const ASSETS = [
