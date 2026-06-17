@@ -10,7 +10,7 @@
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const TIMEZONE = 'Africa/Gaborone';
-const GRAPH_SCOPES = ['User.Read', 'Calendars.ReadWrite'];
+const GRAPH_SCOPES = ['User.Read', 'Calendars.ReadWrite', 'Mail.Send'];
 const S_KEY = 'thusa_settings';
 const T_KEY = 'thusa_team';
 const P_KEY = 'thusa_prompts';
@@ -236,25 +236,68 @@ async function createEvent(m) {
   return res.json();
 }
 
+/* ---------------- Microsoft Graph: send an email ---------------- */
+
+async function sendEmail(m) {
+  const to = (m.to_emails || []).map(a => ({ emailAddress: { address: a } }));
+  if (!to.length) throw new Error('No recipients given.');
+  const message = {
+    subject: m.subject || '(no subject)',
+    body: { contentType: 'Text', content: m.body || '' },
+    toRecipients: to,
+  };
+  if (m.cc_emails && m.cc_emails.length) {
+    message.ccRecipients = m.cc_emails.map(a => ({ emailAddress: { address: a } }));
+  }
+  const token = await getGraphToken(true);
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, saveToSentItems: true }),
+  });
+  if (!res.ok) {
+    let msg = 'Microsoft Graph error ' + res.status;
+    try { const j = await res.json(); msg = (j.error && j.error.message) || msg; } catch {}
+    throw new Error(msg);
+  }
+  return true;  // 202 Accepted, no body
+}
+
 /* ---------------- Google Gemini ---------------- */
 
-const GEMINI_TOOLS = [{
-  name: 'create_meeting',
-  description: 'Create a calendar event in the user\'s Microsoft 365 calendar and send invites to the attendees. Call this once per meeting the user asks for.',
-  parameters: {
-    type: 'object',
-    properties: {
-      subject: { type: 'string', description: 'Short business-style meeting title' },
-      start: { type: 'string', description: 'Start as local Gaborone wall-clock ISO datetime, e.g. 2026-06-15T17:00:00 — no timezone suffix, no Z' },
-      duration_minutes: { type: 'integer', description: 'Length in minutes; default 30' },
-      attendee_emails: { type: 'array', items: { type: 'string' }, description: 'Email addresses of the attendees, taken from the team directory' },
-      notes: { type: 'string', description: 'Optional agenda / body text for the invite' },
-      location: { type: 'string', description: 'Optional physical location, e.g. Boardroom' },
-      online: { type: 'boolean', description: 'true = attach a Microsoft Teams link (the default)' },
+const GEMINI_TOOLS = [
+  {
+    name: 'create_meeting',
+    description: 'Create a calendar event in the user\'s Microsoft 365 calendar and send invites to the attendees. Call this once per meeting the user asks for.',
+    parameters: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', description: 'Short business-style meeting title' },
+        start: { type: 'string', description: 'Start as local Gaborone wall-clock ISO datetime, e.g. 2026-06-15T17:00:00 — no timezone suffix, no Z' },
+        duration_minutes: { type: 'integer', description: 'Length in minutes; default 30' },
+        attendee_emails: { type: 'array', items: { type: 'string' }, description: 'Email addresses of the attendees, taken from the team directory' },
+        notes: { type: 'string', description: 'Optional agenda / body text for the invite' },
+        location: { type: 'string', description: 'Optional physical location, e.g. Boardroom' },
+        online: { type: 'boolean', description: 'true = attach a Microsoft Teams link (the default)' },
+      },
+      required: ['subject', 'start', 'attendee_emails'],
     },
-    required: ['subject', 'start', 'attendee_emails'],
   },
-}];
+  {
+    name: 'send_email',
+    description: 'Send an email from the user\'s Microsoft 365 mailbox to one or more people. Use for requests like "email Bharath and Wangu ...", "send a mail to ...". Call once per distinct email; multiple recipients go in to_emails.',
+    parameters: {
+      type: 'object',
+      properties: {
+        to_emails: { type: 'array', items: { type: 'string' }, description: 'Recipient email addresses, taken from the team directory' },
+        cc_emails: { type: 'array', items: { type: 'string' }, description: 'Optional CC email addresses, from the team directory' },
+        subject: { type: 'string', description: 'Short, clear subject line' },
+        body: { type: 'string', description: 'The full email body in plain text, written professionally on the user\'s behalf. Include a brief greeting and a sign-off as the user.' },
+      },
+      required: ['to_emails', 'subject', 'body'],
+    },
+  },
+];
 
 function systemPrompt() {
   const s = getSettings();
@@ -269,13 +312,12 @@ Team directory — the only people you may invite by name:
 ${dir}
 
 Rules:
-- Turn scheduling requests into create_meeting tool calls. "start" must be local Gaborone wall-clock time, ISO format like 2026-06-15T08:00:00, never with a Z or offset.
-- Match names against the directory case-insensitively and tolerate small misspellings. If a name has no reasonable match, ask — never invent an email address. If the user types a full email address you may use it directly.
-- If no time is given, propose the next working day at 08:00 and say clearly that you assumed it.
-- If no duration is given, use 30 minutes.
-- Default to an online Microsoft Teams meeting unless a physical location is mentioned.
-- One message can contain several meetings — make one tool call per meeting.
-- Sensitive topics (dismissals, appraisals, disciplinary): keep the invite subject discreet and professional; put detail in notes only if the user gave it.
+- Scheduling requests -> create_meeting tool calls. Email requests ("email X...", "send a mail to...") -> send_email tool calls. Pick whichever the user is asking for; one message can ask for both.
+- create_meeting: "start" must be local Gaborone wall-clock time, ISO format like 2026-06-15T08:00:00, never with a Z or offset. If no time given, propose the next working day at 08:00 and say you assumed it. Default 30 minutes. Default to an online Microsoft Teams meeting unless a physical location is mentioned. One tool call per meeting.
+- send_email: write a complete, professional body on the user's behalf with a short greeting and a sign-off. Put every recipient in to_emails; use cc_emails only if asked. One tool call per distinct email.
+- Match names against the directory case-insensitively and tolerate small misspellings. If a name has no reasonable match, ask — never invent an email address. If the user types or an image contains a full email address you may use it directly.
+- ATTACHED IMAGES / SCREENSHOTS: read them carefully and pull out people, email addresses, dates, times and the topic, then turn that into the right create_meeting or send_email call. If a screenshot shows an email address, use it as a recipient even if the person isn't in the directory.
+- Sensitive topics (dismissals, appraisals, disciplinary): keep subjects discreet and professional; put detail in notes/body only if the user gave it.
 - Keep replies short, warm and businesslike. A light touch of Setswana ("Sharp sharp!", "Go siame.") is welcome.`;
 }
 
@@ -452,6 +494,78 @@ async function executeMeeting(localId, args, card) {
   }
 }
 
+// An email confirmation card — same shape as the meeting card, but for send_email.
+function addEmailCard(localId, args) {
+  const w = el('welcome');
+  if (w) w.remove();
+  const input = args || {};
+  const card = document.createElement('div');
+  card.className = 'meeting-card';
+
+  const subject = document.createElement('div');
+  subject.className = 'mc-subject';
+  subject.textContent = '✉️ ' + (input.subject || 'Email');
+  card.appendChild(subject);
+
+  const to = document.createElement('div');
+  to.className = 'mc-line';
+  to.innerHTML = '<b>To:</b> ';
+  to.appendChild(document.createTextNode((input.to_emails || []).map(nameFor).join(', ') || '—'));
+  card.appendChild(to);
+
+  if (input.cc_emails && input.cc_emails.length) {
+    const cc = document.createElement('div');
+    cc.className = 'mc-line';
+    cc.innerHTML = '<b>Cc:</b> ';
+    cc.appendChild(document.createTextNode(input.cc_emails.map(nameFor).join(', ')));
+    card.appendChild(cc);
+  }
+
+  const bodyEl = document.createElement('div');
+  bodyEl.className = 'mc-emailbody';
+  bodyEl.textContent = input.body || '';
+  card.appendChild(bodyEl);
+
+  const actions = document.createElement('div');
+  actions.className = 'mc-actions';
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'primary';
+  sendBtn.textContent = 'Send email';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'ghost-btn';
+  cancelBtn.textContent = 'Cancel';
+  actions.appendChild(sendBtn);
+  actions.appendChild(cancelBtn);
+  card.appendChild(actions);
+
+  sendBtn.addEventListener('click', () => {
+    actions.remove();
+    executeEmail(localId, input, card);
+  });
+  cancelBtn.addEventListener('click', () => {
+    actions.remove();
+    setCardStatus(card, 'Cancelled', 'err');
+    finishTool(localId, 'send_email', { result: 'The user cancelled this email — do not send it.' });
+  });
+
+  card._actions = actions;
+  el('msgs').appendChild(card);
+  el('msgs').scrollTop = el('msgs').scrollHeight;
+  return card;
+}
+
+async function executeEmail(localId, args, card) {
+  setCardStatus(card, 'Sending…');
+  try {
+    await sendEmail(args);
+    setCardStatus(card, '✅ Email sent', 'ok');
+    finishTool(localId, 'send_email', { result: 'Success — the email was sent.' });
+  } catch (e) {
+    setCardStatus(card, '❌ ' + e.message, 'err');
+    finishTool(localId, 'send_email', { error: 'The email could not be sent: ' + e.message });
+  }
+}
+
 // Record a tool's outcome as a Gemini functionResponse part. Once every pending
 // call has a result, the responses are sent back in their ORIGINAL order (Gemini
 // matches parallel calls of the same name positionally — there are no call ids).
@@ -470,35 +584,68 @@ async function onSend() {
   if (busy) return;
   const input = el('chatInput');
   const text = input.value.trim();
-  if (!text) return;
+  const img = pendingImage;          // {mimeType, data} or null
+  if (!text && !img) return;
   const s = getSettings();
   if (!s.apiKey) {
-    addBubble('user', text);
+    addBubble('user', text || '📎 (screenshot)');
     addBubble('assistant', 'Ke kopa API key pele — open Setup and paste your Gemini API key, then Save.');
     switchView('setup');
-    input.value = '';
     return;
   }
   input.value = '';
   input.style.height = 'auto';
-  addBubble('user', text);
+  clearAttachment();                 // hide the preview; we kept the image in `img`
+  addBubble('user', text ? (img ? text + '  📎' : text) : '📎 (screenshot)');
+
+  // The text Gemini sees — supply a prompt when the user only sent an image.
+  const promptText = text || 'Here is a screenshot. Pull out the meeting or email details — including any email address — and set it up.';
+  const newParts = [{ text: promptText }];
+  if (img) newParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
 
   if (awaiting) {
     // The user moved on while cards were still pending: resolve the open ones
-    // as cancelled, then append the new text as a part in the same user turn
-    // (keeps the model → user alternation Gemini expects).
+    // as cancelled, then append the new turn (keeps user/model alternation).
     const parts = awaiting.order.map(o => {
       if (awaiting.results[o.localId]) return awaiting.results[o.localId];
       const card = awaiting.cards[o.localId];
       if (card) setCardStatus(card, 'Cancelled', 'err');
-      return { functionResponse: { name: o.name, response: { result: 'The user moved on without confirming — treat this meeting as cancelled.' } } };
+      return { functionResponse: { name: o.name, response: { result: 'The user moved on without confirming — treat this as cancelled, do not action it.' } } };
     });
     awaiting = null;
-    history.push({ role: 'user', parts: [...parts, { text }] });
+    history.push({ role: 'user', parts: [...parts, ...newParts] });
   } else {
-    history.push({ role: 'user', parts: [{ text }] });
+    history.push({ role: 'user', parts: newParts });
   }
   await runLLM();
+}
+
+/* ---------------- screenshot attachments ---------------- */
+
+let pendingImage = null;  // { mimeType, data(base64) } staged for the next send
+
+function setAttachment(file) {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) { toast('Please attach an image (screenshot).'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '');
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) { toast('Could not read that image.'); return; }
+    pendingImage = { mimeType: file.type, data: dataUrl.slice(comma + 1) };
+    const p = el('attachPreview');
+    if (p) { p.textContent = '📎 ' + (file.name || 'screenshot') + '   ✕'; p.hidden = false; }
+  };
+  reader.onerror = () => toast('Could not read that image.');
+  reader.readAsDataURL(file);
+}
+
+function clearAttachment() {
+  pendingImage = null;
+  const p = el('attachPreview');
+  if (p) { p.hidden = true; p.textContent = ''; }
+  const ai = el('attachInput');
+  if (ai) ai.value = '';
 }
 
 async function runLLM() {
@@ -547,16 +694,17 @@ async function runLLM() {
   calls.forEach((fc, i) => {
     const localId = 'fc' + i;
     awaiting.order.push({ localId, name: fc.name });
-    if (fc.name !== 'create_meeting') {
-      finishTool(localId, fc.name, { error: 'Unknown tool "' + fc.name + '" — only create_meeting is available.' });
-      return;
-    }
     const args = fc.args || {};
-    const card = addCard(localId, args);
-    awaiting.cards[localId] = card;
-    if (autoSend) {
-      card._actions.remove();
-      executeMeeting(localId, args, card);
+    if (fc.name === 'create_meeting') {
+      const card = addCard(localId, args);
+      awaiting.cards[localId] = card;
+      if (autoSend) { card._actions.remove(); executeMeeting(localId, args, card); }
+    } else if (fc.name === 'send_email') {
+      const card = addEmailCard(localId, args);
+      awaiting.cards[localId] = card;
+      if (autoSend) { card._actions.remove(); executeEmail(localId, args, card); }
+    } else {
+      finishTool(localId, fc.name, { error: 'Unknown tool "' + fc.name + '".' });
     }
   });
 }
@@ -944,6 +1092,9 @@ function wire() {
     b.addEventListener('click', () => switchView(b.dataset.view));
   }
   el('sendBtn').addEventListener('click', onSend);
+  el('attachBtn').addEventListener('click', () => el('attachInput').click());
+  el('attachInput').addEventListener('change', e => setAttachment(e.target.files && e.target.files[0]));
+  el('attachPreview').addEventListener('click', clearAttachment);
   const input = el('chatInput');
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
@@ -975,7 +1126,16 @@ function wire() {
   el('shareBtn').addEventListener('click', () => shareApp());
 }
 
+// Remove the 3D splash once its animation has played (CSS also auto-hides it,
+// so a JS hiccup can never leave it covering the app).
+function dismissSplash() {
+  const sp = el('splash');
+  if (!sp) return;
+  setTimeout(() => { sp.classList.add('gone'); setTimeout(() => sp.remove(), 700); }, 2200);
+}
+
 async function main() {
+  dismissSplash();
   wire();
   applyInviteParams();   // honour ?client=&tenant= from an invite link first
   setupInstallUI();      // highlight Android/Apple steps for the current phone

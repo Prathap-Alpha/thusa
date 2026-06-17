@@ -18,6 +18,13 @@
 </head>
 <body>
 
+<!-- 3D launch splash — plays on app open, then auto-fades (CSS) and is removed (JS) -->
+<div id="splash" aria-hidden="true">
+  <div class="splash-stage"><div class="splash-logo">T</div></div>
+  <div class="splash-name">Thusa</div>
+  <div class="splash-by">developed by <b>Risk&nbsp;AI</b></div>
+</div>
+
 <header>
   <div class="brand">
     <span class="brand-mark">T</span>
@@ -39,7 +46,10 @@
         <div class="chips" id="chips"></div>
       </div>
     </div>
+    <div id="attachPreview" hidden></div>
     <div id="composer">
+      <input id="attachInput" type="file" accept="image/*" hidden>
+      <button id="attachBtn" aria-label="Attach a screenshot">📎</button>
       <textarea id="chatInput" rows="1" placeholder="e.g. Set up a meeting with Kago at 5pm today…" enterkeyhint="send"></textarea>
       <button id="sendBtn" aria-label="Send">➤</button>
     </div>
