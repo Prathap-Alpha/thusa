@@ -9,6 +9,26 @@
    ============================================================ */
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+// The AI "brains" the user can choose between in Setup. Keys are per-provider
+// so switching never loses the other one. Gemini is multimodal (screenshots);
+// DeepSeek is OpenAI-compatible, text-only, and runs on servers in China.
+const PROVIDERS = {
+  gemini:   { label: 'Google Gemini', defaultModel: 'gemini-2.5-flash', keyHint: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey',     vision: true },
+  deepseek: { label: 'DeepSeek',       defaultModel: 'deepseek-chat',     keyHint: 'sk-…',  keyUrl: 'https://platform.deepseek.com/api_keys', vision: false },
+};
+function activeProvider() { return getSettings().provider === 'deepseek' ? 'deepseek' : 'gemini'; }
+function providerKey(p) {
+  const s = getSettings();
+  return p === 'deepseek' ? (s.deepseekKey || '') : (s.geminiKey || s.apiKey || '');  // legacy apiKey == gemini
+}
+function providerModel(p) {
+  const s = getSettings();
+  return p === 'deepseek'
+    ? (s.deepseekModel || PROVIDERS.deepseek.defaultModel)
+    : (s.geminiModel || s.model || PROVIDERS.gemini.defaultModel);
+}
+function activeKey() { return providerKey(activeProvider()); }
 const TIMEZONE = 'Africa/Gaborone';
 const GRAPH_SCOPES = ['User.Read', 'Calendars.ReadWrite', 'Mail.Send'];
 const S_KEY = 'thusa_settings';
@@ -321,11 +341,18 @@ Rules:
 - Keep replies short, warm and businesslike. A light touch of Setswana ("Sharp sharp!", "Go siame.") is welcome.`;
 }
 
+// Dispatch to whichever brain the user picked. Both return a Gemini-shaped
+// response ({candidates:[{content:{parts}}]}) so the chat engine below is
+// provider-agnostic and the existing Gemini path is untouched.
+async function callLLM(contents) {
+  return activeProvider() === 'deepseek' ? callDeepSeek(contents) : callGemini(contents);
+}
+
 async function callGemini(contents) {
-  const s = getSettings();
-  const model = s.model || DEFAULT_MODEL;
+  const key = providerKey('gemini');
+  const model = providerModel('gemini');
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-    + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(s.apiKey);
+    + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(key);
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -346,6 +373,72 @@ async function callGemini(contents) {
     throw new Error(msg);
   }
   return res.json();
+}
+
+// --- DeepSeek (OpenAI-compatible) ---------------------------------------
+// Translate our Gemini-format history to OpenAI messages. tool_call ids are
+// synthesised per assistant turn and matched to the following functionResponses
+// by order (our engine always pairs them adjacently and in order). Images are
+// dropped — DeepSeek's chat model is text-only.
+function geminiToOpenAI(contents) {
+  const messages = [{ role: 'system', content: systemPrompt() }];
+  let lastIds = [];
+  contents.forEach((c, ci) => {
+    if (c.role === 'model') {
+      const texts = (c.parts || []).filter(p => p.text).map(p => p.text);
+      const fcs = (c.parts || []).filter(p => p.functionCall);
+      if (fcs.length) {
+        lastIds = fcs.map((_, k) => 'call_' + ci + '_' + k);
+        messages.push({
+          role: 'assistant',
+          content: texts.join('\n') || null,
+          tool_calls: fcs.map((p, k) => ({ id: lastIds[k], type: 'function', function: { name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args || {}) } })),
+        });
+      } else {
+        lastIds = [];
+        messages.push({ role: 'assistant', content: texts.join('\n') });
+      }
+    } else { // user
+      const frs = (c.parts || []).filter(p => p.functionResponse);
+      const texts = (c.parts || []).filter(p => p.text).map(p => p.text);
+      frs.forEach((p, k) => messages.push({
+        role: 'tool', tool_call_id: lastIds[k] || ('call_' + ci + '_' + k),
+        content: JSON.stringify(p.functionResponse.response || {}),
+      }));
+      if (texts.length) messages.push({ role: 'user', content: texts.join('\n') });
+    }
+  });
+  return messages;
+}
+
+async function callDeepSeek(contents) {
+  const key = providerKey('deepseek');
+  const model = providerModel('deepseek');
+  const tools = GEMINI_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+    body: JSON.stringify({ model, messages: geminiToOpenAI(contents), tools, tool_choice: 'auto', temperature: 0.2, max_tokens: 2048 }),
+  });
+  if (!res.ok) {
+    let msg = 'DeepSeek API error ' + res.status;
+    try { const j = await res.json(); msg = (j.error && j.error.message) || msg; } catch {}
+    if (res.status === 401) msg = 'Your DeepSeek API key was rejected — check it in Setup.';
+    if (res.status === 402) msg = 'DeepSeek reports insufficient balance — top up your DeepSeek account.';
+    if (res.status === 429) msg = 'DeepSeek rate limit — wait a few seconds and try again.';
+    throw new Error(msg);
+  }
+  const j = await res.json();
+  const m = (j.choices && j.choices[0] && j.choices[0].message) || {};
+  const parts = [];
+  if (m.content && m.content.trim()) parts.push({ text: m.content });
+  for (const tc of (m.tool_calls || [])) {
+    let args = {};
+    try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
+    parts.push({ functionCall: { name: tc.function.name, args } });
+  }
+  // Re-shape to look like a Gemini response so runLLM handles it unchanged.
+  return { candidates: [{ content: { role: 'model', parts }, finishReason: (j.choices && j.choices[0] && j.choices[0].finish_reason) || 'stop' }] };
 }
 
 /* ---------------- chat engine ---------------- */
@@ -584,14 +677,19 @@ async function onSend() {
   if (busy) return;
   const input = el('chatInput');
   const text = input.value.trim();
-  const img = pendingImage;          // {mimeType, data} or null
+  let img = pendingImage;            // {mimeType, data} or null
   if (!text && !img) return;
-  const s = getSettings();
-  if (!s.apiKey) {
+  if (!activeKey()) {
     addBubble('user', text || '📎 (screenshot)');
-    addBubble('assistant', 'Ke kopa API key pele — open Setup and paste your Gemini API key, then Save.');
+    addBubble('assistant', 'Ke kopa API key pele — open Setup, pick your AI provider and paste its key, then Save.');
     switchView('setup');
     return;
+  }
+  // DeepSeek can't read images — drop the attachment and tell the user.
+  if (img && !PROVIDERS[activeProvider()].vision) {
+    toast('DeepSeek can’t read screenshots — switch to Gemini in Setup for that. Sending your text only.');
+    img = null;
+    if (!text) { clearAttachment(); return; }
   }
   input.value = '';
   input.style.height = 'auto';
@@ -653,7 +751,7 @@ async function runLLM() {
   setThinking(true);
   let resp;
   try {
-    resp = await callGemini(history);
+    resp = await callLLM(history);
   } catch (e) {
     setThinking(false);
     // Roll back the one user turn (text or function-responses) the caller just
@@ -936,10 +1034,40 @@ function resetPrompts() {
 
 /* ---------------- setup view ---------------- */
 
+let formProvider = 'gemini';  // which provider the key/model fields currently hold
+
+// Fill the key/model fields + hint for the provider selected in the dropdown.
+function loadProviderFields() {
+  const p = el('setProvider').value;
+  formProvider = p;
+  const d = PROVIDERS[p] || PROVIDERS.gemini;
+  el('setApiKey').value = providerKey(p);
+  el('setApiKey').placeholder = d.keyHint;
+  el('setModel').value = providerModel(p);
+  el('setModel').placeholder = d.defaultModel;
+  el('keyHint').innerHTML = p === 'deepseek'
+    ? 'DeepSeek key from <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener"><b>platform.deepseek.com →</b></a> (starts with <code>sk-</code>). Note: DeepSeek runs in China and can’t read screenshots.'
+    : 'Free Gemini key (30 sec): <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener"><b>Get a free Gemini key →</b></a> tap Create API key, copy it (starts with <code>AIza</code>).';
+}
+
+// Persist the visible key/model into the provider those fields belong to.
+function persistCurrentKey() {
+  const p = formProvider;
+  const k = el('setApiKey').value.trim();
+  const m = el('setModel').value.trim() || PROVIDERS[p].defaultModel;
+  saveSettings(p === 'deepseek' ? { deepseekKey: k, deepseekModel: m } : { geminiKey: k, geminiModel: m });
+}
+
+function onProviderChange() {
+  persistCurrentKey();                              // keep what was typed for the old provider
+  saveSettings({ provider: el('setProvider').value });
+  loadProviderFields();
+}
+
 function loadSettingsForm() {
   const s = getSettings();
-  el('setApiKey').value = s.apiKey || '';
-  el('setModel').value = s.model || DEFAULT_MODEL;
+  el('setProvider').value = activeProvider();
+  loadProviderFields();
   el('setClientId').value = s.clientId || '';
   el('setTenantId').value = s.tenantId || '';
   el('setAutoSend').checked = !!s.autoSend;
@@ -948,9 +1076,9 @@ function loadSettingsForm() {
 function saveSettingsForm() {
   const prevClient = getSettings().clientId;
   const prevTenant = getSettings().tenantId;
+  persistCurrentKey();
   saveSettings({
-    apiKey: el('setApiKey').value.trim(),
-    model: el('setModel').value.trim() || DEFAULT_MODEL,
+    provider: el('setProvider').value,
     clientId: el('setClientId').value.trim(),
     tenantId: el('setTenantId').value.trim(),
     autoSend: el('setAutoSend').checked,
@@ -978,6 +1106,7 @@ function applyInviteParams() {
   const cid = p.get('client'); if (cid) patch.clientId = cid.trim();
   const tid = p.get('tenant'); if (tid) patch.tenantId = tid.trim();
   const mdl = p.get('model');  if (mdl) patch.model = mdl.trim();
+  const prov = p.get('provider'); if (prov === 'gemini' || prov === 'deepseek') patch.provider = prov;
   if (Object.keys(patch).length) {
     saveSettings(patch);              // only Microsoft IDs + model — never a key/team
     _pca = null; _pcaReady = null;    // rebuild MSAL with the invited authority
@@ -998,7 +1127,7 @@ function buildShareUrl() {
   const p = new URLSearchParams();
   if (s.clientId) p.set('client', s.clientId);
   if (s.tenantId) p.set('tenant', s.tenantId);
-  if (s.model && s.model !== DEFAULT_MODEL) p.set('model', s.model);
+  if (s.provider === 'deepseek') p.set('provider', 'deepseek');
   const q = p.toString();
   return q ? base + '?' + q : base;
 }
@@ -1118,6 +1247,7 @@ function wire() {
       if (e.key === 'Enter') { e.preventDefault(); addTeamMember(); }
     });
   }
+  el('setProvider').addEventListener('change', onProviderChange);
   el('saveBtn').addEventListener('click', saveSettingsForm);
   el('signInBtn').addEventListener('click', () => { saveSettingsForm(); signIn().catch(e => toast(e.errorMessage || e.message)); });
   el('signOutBtn').addEventListener('click', () => signOut().catch(e => toast(e.message)));

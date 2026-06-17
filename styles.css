@@ -269,3 +269,84 @@ details summary { cursor: pointer; color: var(--orange); font-size: 14px; margin
   border-radius: 10px; padding: 10px 16px; font-size: 13.5px; max-width: 86%;
   z-index: 50;
 }
+
+/* ============================================================
+   iOS / Apple-glass polish — ref: design-guides/awesome-claude-design
+   (glass/apple.md): SF Pro, frosted vibrancy materials over fills,
+   12–18px radii, one accent tint (orange), no hard borders on cards,
+   16px inputs (stops iOS focus-zoom). Layered over the rules above.
+   ============================================================ */
+:root {
+  --ios-radius: 18px;
+  --material: rgba(21, 38, 58, 0.72);
+  --hairline: rgba(143, 163, 184, 0.16);
+}
+body {
+  font-family: -apple-system, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  background: radial-gradient(125% 90% at 50% -8%, #16273c 0%, #0d1b2a 55%, #0a1421 100%) fixed;
+}
+
+/* Frosted chrome: header, bottom tab bar, composer float above content */
+header, nav#tabs, #composer {
+  background: var(--material);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+header { border-bottom: 1px solid var(--hairline); }
+nav#tabs { border-top: 1px solid var(--hairline); }
+#composer { border-top: 1px solid var(--hairline); }
+nav#tabs button.active span { font-weight: 600; }
+.brand-mark { border-radius: 13px; box-shadow: 0 6px 18px rgba(244, 166, 35, 0.30); }
+
+/* Cards & list rows: elevated vibrancy material, soft, no hard border */
+.card, #teamList li {
+  border: none;
+  background: rgba(28, 40, 58, 0.66);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-radius: var(--ios-radius);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 30px rgba(0, 0, 0, 0.26);
+}
+.meeting-card {
+  background: rgba(28, 40, 58, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(244, 166, 35, 0.45);     /* keep the accent edge on action cards */
+  border-radius: var(--ios-radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.30);
+}
+
+/* Inputs / select: grouped surface, soft, accent focus halo, 16px (no iOS zoom) */
+input, textarea, select {
+  background: rgba(13, 27, 42, 0.6);
+  border: 1px solid var(--hairline); border-radius: 12px; font-size: 16px;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(244, 166, 35, 0.18);
+}
+#setProvider {
+  width: 100%; margin-top: 4px; padding: 11px 12px; color: var(--text);
+  font-family: inherit; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%238FA3B8' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+
+/* Buttons: single orange tint, weight 600, soft */
+button.primary { border-radius: 12px; font-weight: 600; }
+#sendBtn { box-shadow: 0 6px 16px rgba(244, 166, 35, 0.32); }
+#attachBtn { background: rgba(13, 27, 42, 0.6); }
+
+/* Message bubbles: iOS feel */
+.bubble { border-radius: 20px; font-size: 16px; line-height: 1.4; }
+.bubble.user { border-bottom-right-radius: 6px; box-shadow: 0 6px 16px rgba(244, 166, 35, 0.22); }
+.bubble.assistant {
+  background: rgba(28, 40, 58, 0.7); border: none; border-bottom-left-radius: 6px;
+  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+}
+#chatInput { border-radius: 20px; font-size: 16px; }
+.chip { border-radius: 14px; background: rgba(28, 40, 58, 0.62); border: 1px solid var(--hairline); }
+
+/* Large-title-ish section headers */
+h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
